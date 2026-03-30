@@ -72,9 +72,9 @@ function matchTier(raw: string): Tier | null {
     메테오라이트: "Meteorite",
     메테오: "Meteorite",
     미스릴: "Mythril",
-    타이탄: "Titan",
-    이모탈: "Immortal",
-    임모탈: "Immortal",
+    데미갓: "Titan",
+    이터니티: "Immortal",
+    이터: "Immortal",
   };
   return koMap[v] || null;
 }

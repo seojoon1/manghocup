@@ -4,11 +4,11 @@ export const TIERS = [
   "Silver",
   "Gold",
   "Platinum",
-  "Emerald",
   "Diamond",
-  "Master",
-  "Grandmaster",
-  "Challenger",
+  "Meteorite",
+  "Mythril",
+  "Titan",
+  "Immortal",
 ] as const;
 
 export type Tier = (typeof TIERS)[number];
@@ -19,21 +19,17 @@ export const TIER_SCORES: Record<Tier, number> = {
   Silver: 3,
   Gold: 4,
   Platinum: 5,
-  Emerald: 6,
-  Diamond: 7,
-  Master: 8,
-  Grandmaster: 9,
-  Challenger: 10,
+  Diamond: 6,
+  Meteorite: 7,
+  Mythril: 8,
+  Titan: 9,
+  Immortal: 10,
 };
-
-export const POSITIONS = ["Top", "Jungle", "Mid", "ADC", "Support"] as const;
-export type Position = (typeof POSITIONS)[number];
 
 export interface Player {
   id: string;
   name: string;
   tier: Tier;
-  position: Position;
   memo: string;
 }
 

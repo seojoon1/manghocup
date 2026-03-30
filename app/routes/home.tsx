@@ -1,85 +1,341 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useFetcher } from "react-router";
 import type { Route } from "./+types/home";
-import type { Player, Team } from "~/types/player";
-import { TeamDisplay } from "~/components/team-display";
-import { balanceTeams, randomTeams } from "~/utils/team-balancer";
-import { parseCSV, toGoogleSheetsCSVUrl } from "~/utils/csv-parser";
+import type { Player, Captain, Phase, Tier } from "~/types/player";
+import { CaptainSelect } from "~/components/captain-select";
+import { Auction } from "~/components/auction";
+import { DraftResult } from "~/components/draft-result";
+import {
+  toGoogleSheetsJsonUrl,
+  parseGoogleSheetsJson,
+  extractSheetId,
+} from "~/utils/csv-parser";
 
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "망호컵 - 이터널리턴 내전" },
-    { name: "description", content: "이터널리턴 내전 팀 밸런서" },
+    { name: "description", content: "이터널리턴 내전 경매" },
   ];
 }
 
+// 서버 사이드에서 Google Sheets JSON fetch
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const rawUrl = formData.get("csvUrl") as string;
+
+  if (!rawUrl?.trim()) {
+    return { error: "CSV 링크를 입력해주세요.", players: null };
+  }
+
+  try {
+    const sheetId = extractSheetId(rawUrl.trim());
+    if (!sheetId) {
+      return { error: "올바른 Google Sheets 링크가 아닙니다.", players: null };
+    }
+
+    const url = toGoogleSheetsJsonUrl(rawUrl.trim());
+    const res = await fetch(url);
+    if (!res.ok) {
+      return {
+        error: `데이터를 가져올 수 없습니다. (${res.status}) — 시트가 공개 상태인지 확인하세요.`,
+        players: null,
+      };
+    }
+    const text = await res.text();
+    const players = parseGoogleSheetsJson(text);
+
+    if (players.length < 6) {
+      return { error: "최소 6명이 필요합니다.", players: null };
+    }
+
+    return { error: null, players };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "알 수 없는 오류",
+      players: null,
+    };
+  }
+}
+
+const CAPTAIN_BUDGET_BY_TIER: Record<Tier, number> = {
+  Iron: 1300,
+  Bronze: 1250,
+  Silver: 1200,
+  Gold: 1150,
+  Platinum: 1100,
+  Diamond: 1050,
+  Meteorite: 1000,
+  Mythril: 950,
+  Titan: 900,
+  Immortal: 850,
+};
+
+const AUCTION_ROUND_SECONDS = 30;
+const DRAFT_STORAGE_KEY = "manghocup.draft.v1";
+
+type AuctionHistoryItem = {
+  captainIdx: number;
+  player: Player;
+  amount: number;
+  prevBudget: number;
+};
+
+type DraftSnapshot = {
+  version: 1;
+  csvUrl: string;
+  allPlayers: Player[];
+  phase: Phase;
+  selectedCaptainIds: string[];
+  captains: Captain[];
+  auctionPool: Player[];
+  auctionIndex: number;
+  history: AuctionHistoryItem[];
+};
+
 export default function Home() {
+  const fetcher = useFetcher<typeof action>();
   const [csvUrl, setCsvUrl] = useState("");
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [mode, setMode] = useState<"input" | "loaded" | "result">("input");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [phase, setPhase] = useState<Phase>("input");
 
-  const teamSize = 3;
+  // Captain select
+  const [selectedCaptainIds, setSelectedCaptainIds] = useState<Set<string>>(
+    new Set()
+  );
 
-  const handleFetch = useCallback(async () => {
-    if (!csvUrl.trim()) {
-      setError("CSV 링크를 입력해주세요.");
+  // Auction
+  const [captains, setCaptains] = useState<Captain[]>([]);
+  const [auctionPool, setAuctionPool] = useState<Player[]>([]);
+  const [auctionIndex, setAuctionIndex] = useState(0);
+  const [history, setHistory] = useState<AuctionHistoryItem[]>([]);
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  // fetcher 결과
+  const loading = fetcher.state === "submitting";
+  const fetcherError = fetcher.data?.error ?? null;
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
     try {
-      const url = toGoogleSheetsCSVUrl(csvUrl.trim());
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(`데이터를 가져올 수 없습니다. (${res.status})`);
-      }
-      const text = await res.text();
-      const parsed = parseCSV(text);
-
-      if (parsed.length === 0) {
-        throw new Error("플레이어 데이터가 없습니다.");
-      }
-      if (parsed.length % teamSize !== 0) {
-        throw new Error(
-          `${teamSize}인 1팀 기준, ${parsed.length}명은 팀을 균등하게 나눌 수 없습니다. (${teamSize}의 배수 필요)`
-        );
+      const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!raw) {
+        setHasHydrated(true);
+        return;
       }
 
-      setPlayers(parsed);
-      setMode("loaded");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "알 수 없는 오류");
+      const snapshot = JSON.parse(raw) as Partial<DraftSnapshot>;
+      if (snapshot.version !== 1) {
+        setHasHydrated(true);
+        return;
+      }
+
+      const validPhase: Phase =
+        snapshot.phase === "captainSelect" ||
+        snapshot.phase === "auction" ||
+        snapshot.phase === "result"
+          ? snapshot.phase
+          : "input";
+
+      setCsvUrl(typeof snapshot.csvUrl === "string" ? snapshot.csvUrl : "");
+      setAllPlayers(Array.isArray(snapshot.allPlayers) ? snapshot.allPlayers : []);
+      setPhase(validPhase);
+      setSelectedCaptainIds(
+        new Set(
+          Array.isArray(snapshot.selectedCaptainIds)
+            ? snapshot.selectedCaptainIds
+            : []
+        )
+      );
+      setCaptains(Array.isArray(snapshot.captains) ? snapshot.captains : []);
+      setAuctionPool(Array.isArray(snapshot.auctionPool) ? snapshot.auctionPool : []);
+      setAuctionIndex(
+        typeof snapshot.auctionIndex === "number" ? snapshot.auctionIndex : 0
+      );
+      setHistory(Array.isArray(snapshot.history) ? snapshot.history : []);
+    } catch {
+      // Ignore invalid local storage payloads and continue with defaults.
     } finally {
-      setLoading(false);
+      setHasHydrated(true);
     }
-  }, [csvUrl]);
-
-  const handleBalance = useCallback(() => {
-    setTeams(balanceTeams(players, teamSize));
-    setMode("result");
-  }, [players]);
-
-  const handleRandom = useCallback(() => {
-    setTeams(randomTeams(players, teamSize));
-    setMode("result");
-  }, [players]);
-
-  const handleReset = useCallback(() => {
-    setTeams([]);
-    setPlayers([]);
-    setMode("input");
-    setError(null);
   }, []);
 
-  const scoreDiff =
-    teams.length > 0
-      ? Math.max(...teams.map((t) => t.totalScore)) -
-        Math.min(...teams.map((t) => t.totalScore))
-      : 0;
+  useEffect(() => {
+    if (!hasHydrated || typeof window === "undefined") {
+      return;
+    }
+
+    const snapshot: DraftSnapshot = {
+      version: 1,
+      csvUrl,
+      allPlayers,
+      phase,
+      selectedCaptainIds: Array.from(selectedCaptainIds),
+      captains,
+      auctionPool,
+      auctionIndex,
+      history,
+    };
+
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(snapshot));
+  }, [
+    hasHydrated,
+    csvUrl,
+    allPlayers,
+    phase,
+    selectedCaptainIds,
+    captains,
+    auctionPool,
+    auctionIndex,
+    history,
+  ]);
+
+  useEffect(() => {
+    if (fetcher.data?.players && phase === "input") {
+      setAllPlayers(fetcher.data.players);
+      setSelectedCaptainIds(new Set());
+      setPhase("captainSelect");
+    }
+  }, [fetcher.data]);
+
+  // 팀장 토글
+  const toggleCaptain = useCallback((player: Player) => {
+    setSelectedCaptainIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(player.id)) {
+        next.delete(player.id);
+      } else {
+        next.add(player.id);
+      }
+      return next;
+    });
+  }, []);
+
+  // 팀장 확정 → 경매 시작
+  const confirmCaptains = useCallback(() => {
+    const captainPlayers = allPlayers.filter((p) =>
+      selectedCaptainIds.has(p.id)
+    );
+    const pool = allPlayers.filter((p) => !selectedCaptainIds.has(p.id));
+
+    // 셔플
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+
+    setCaptains(
+      captainPlayers.map((p) => ({
+        player: p,
+        budget: CAPTAIN_BUDGET_BY_TIER[p.tier],
+        members: [],
+      }))
+    );
+    setAuctionPool(shuffled);
+    setAuctionIndex(0);
+    setHistory([]);
+    setPhase("auction");
+  }, [allPlayers, selectedCaptainIds]);
+
+  // 팀원 수 계산
+  const membersPerTeam =
+    captains.length > 0
+      ? Math.floor(
+          (allPlayers.length - captains.length) / captains.length
+        )
+      : 2;
+
+  // 낙찰
+  const handleBid = useCallback(
+    (captainIdx: number, amount: number) => {
+      const captain = captains[captainIdx];
+      const player = auctionPool[auctionIndex];
+
+      setHistory((prev) => [
+        ...prev,
+        {
+          captainIdx,
+          player,
+          amount,
+          prevBudget: captain.budget,
+        },
+      ]);
+
+      setCaptains((prev) =>
+        prev.map((c, i) =>
+          i === captainIdx
+            ? {
+                ...c,
+                budget: c.budget - amount,
+                members: [...c.members, player],
+              }
+            : c
+        )
+      );
+
+      const nextIndex = auctionIndex + 1;
+      if (nextIndex >= auctionPool.length) {
+        setAuctionIndex(nextIndex);
+        setPhase("result");
+      } else {
+        setAuctionIndex(nextIndex);
+      }
+    },
+    [captains, auctionPool, auctionIndex]
+  );
+
+  const handleSkip = useCallback(() => {
+    const nextIndex = auctionIndex + 1;
+
+    if (nextIndex >= auctionPool.length) {
+      setAuctionIndex(nextIndex);
+      setPhase("result");
+      return;
+    }
+
+    setAuctionIndex(nextIndex);
+  }, [auctionIndex, auctionPool.length]);
+
+  // 되돌리기
+  const handleUndo = useCallback(() => {
+    if (history.length === 0) return;
+    const last = history[history.length - 1];
+
+    setCaptains((prev) =>
+      prev.map((c, i) =>
+        i === last.captainIdx
+          ? {
+              ...c,
+              budget: last.prevBudget,
+              members: c.members.filter((m) => m.id !== last.player.id),
+            }
+          : c
+      )
+    );
+
+    setAuctionIndex((prev) => prev - 1);
+    setHistory((prev) => prev.slice(0, -1));
+
+    if (phase === "result") {
+      setPhase("auction");
+    }
+  }, [history, phase]);
+
+  // 리셋
+  const handleReset = useCallback(() => {
+    setCsvUrl("");
+    setAllPlayers([]);
+    setSelectedCaptainIds(new Set());
+    setCaptains([]);
+    setAuctionPool([]);
+    setAuctionIndex(0);
+    setHistory([]);
+    setPhase("input");
+
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      window.localStorage.removeItem("manghocup.round.v1");
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -91,9 +347,9 @@ export default function Home() {
               <span className="text-blue-400">망호</span>
               <span className="text-red-400">컵</span>
             </h1>
-            <p className="text-gray-500 text-sm">이터널리턴 내전 팀 밸런서</p>
+            <p className="text-gray-500 text-sm">이터널리턴 내전 경매</p>
           </div>
-          {mode !== "input" && (
+          {phase !== "input" && (
             <button
               onClick={handleReset}
               className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
@@ -105,36 +361,37 @@ export default function Home() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* Step 1: CSV URL 입력 */}
-        {mode === "input" && (
+        {/* Phase 1: CSV 입력 */}
+        {phase === "input" && (
           <div className="space-y-6 max-w-2xl mx-auto">
             <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
               <h2 className="text-lg font-semibold text-gray-200 mb-4">
                 스프레드시트 링크 입력
               </h2>
               <p className="text-gray-400 text-sm mb-4">
-                Google Sheets 공유 링크 또는 CSV URL을 입력하세요.
+                Google Sheets 공유 링크를 입력하세요. (링크가 있는 사람 모두
+                보기로 설정)
               </p>
-              <div className="flex gap-3">
+              <fetcher.Form method="post" className="flex gap-3">
                 <input
                   type="url"
+                  name="csvUrl"
                   value={csvUrl}
                   onChange={(e) => setCsvUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleFetch()}
                   placeholder="https://docs.google.com/spreadsheets/d/..."
                   className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <button
-                  onClick={handleFetch}
+                  type="submit"
                   disabled={loading}
                   className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-400 text-white font-semibold rounded-lg transition-colors text-sm whitespace-nowrap"
                 >
                   {loading ? "불러오는 중..." : "불러오기"}
                 </button>
-              </div>
+              </fetcher.Form>
             </div>
 
-            {/* CSV 형식 안내 */}
+            {/* 형식 안내 */}
             <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
               <h3 className="text-sm font-semibold text-gray-300 mb-3">
                 스프레드시트 형식
@@ -178,123 +435,64 @@ export default function Home() {
                   </tbody>
                 </table>
               </div>
-              <p className="text-gray-500 text-xs mt-3">
-                * 티어는 한글(골드, 미스릴, 메테오) / 영문(Gold, Mythril,
-                Meteorite) 모두 인식
-              </p>
-              <p className="text-gray-500 text-xs">
-                * 인원은 3의 배수 (3인 1팀 기준)
-              </p>
+              <div className="text-gray-500 text-xs mt-3 space-y-1">
+                <p>* 티어: 한글/영문 모두 인식</p>
+                <p>* 각 팀장의 초기 예산은 팀장 티어에 따라 차등 지급됩니다</p>
+              </div>
             </div>
 
-            {error && (
+            {fetcherError && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
-                {error}
+                {fetcherError}
               </div>
             )}
           </div>
         )}
 
-        {/* Step 2: 플레이어 확인 */}
-        {mode === "loaded" && (
-          <div className="space-y-6 max-w-2xl mx-auto">
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-200">
-                  플레이어 명단
-                </h2>
-                <span className="text-gray-400 text-sm">
-                  {players.length}명 → {Math.floor(players.length / teamSize)}팀
-                </span>
-              </div>
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-gray-800 text-gray-300">
-                    <th className="border border-gray-700 px-3 py-2 w-10 text-center">
-                      #
-                    </th>
-                    <th className="border border-gray-700 px-3 py-2 text-left">
-                      이름
-                    </th>
-                    <th className="border border-gray-700 px-3 py-2 text-left">
-                      티어
-                    </th>
-                    <th className="border border-gray-700 px-3 py-2 text-left">
-                      메모
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {players.map((p, i) => (
-                    <tr
-                      key={p.id}
-                      className={
-                        i % 2 === 0 ? "bg-gray-900" : "bg-gray-800/50"
-                      }
-                    >
-                      <td className="border border-gray-700 px-3 py-2 text-center text-gray-500 font-mono">
-                        {i + 1}
-                      </td>
-                      <td className="border border-gray-700 px-3 py-2 text-white">
-                        {p.name}
-                      </td>
-                      <td className="border border-gray-700 px-3 py-2 text-gray-300">
-                        {p.tier}
-                      </td>
-                      <td className="border border-gray-700 px-3 py-2 text-gray-500">
-                        {p.memo}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleBalance}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition-colors text-sm"
-              >
-                밸런스 팀 나누기
-              </button>
-              <button
-                onClick={handleRandom}
-                className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors text-sm"
-              >
-                랜덤 팀 나누기
-              </button>
-            </div>
-          </div>
+        {/* Phase 2: 팀장 선정 */}
+        {phase === "captainSelect" && (
+          <CaptainSelect
+            players={allPlayers}
+            selectedCaptainIds={selectedCaptainIds}
+            onToggleCaptain={toggleCaptain}
+            onConfirm={confirmCaptains}
+            maxCaptains={Math.floor(allPlayers.length / 3)}
+          />
         )}
 
-        {/* Step 3: 팀 결과 */}
-        {mode === "result" && teams.length > 0 && (
+        {/* Phase 3: 경매 */}
+        {phase === "auction" && auctionIndex < auctionPool.length && (
+          <Auction
+            currentPlayer={auctionPool[auctionIndex]}
+            captains={captains}
+            playerIndex={auctionIndex}
+            totalPlayers={auctionPool.length}
+            onBid={handleBid}
+            onSkip={handleSkip}
+            onUndo={handleUndo}
+            canUndo={history.length > 0}
+            membersPerTeam={membersPerTeam}
+            roundSeconds={AUCTION_ROUND_SECONDS}
+          />
+        )}
+
+        {/* Phase 4: 결과 */}
+        {phase === "result" && (
           <div className="space-y-6">
-            <div className="text-center">
-              <span className="inline-block bg-gray-800 rounded-full px-4 py-2 text-sm">
-                최대 점수 차이:{" "}
-                <span className="text-yellow-400 font-bold">{scoreDiff}</span>
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {teams.map((team, i) => (
-                <TeamDisplay key={i} team={team} teamNumber={i + 1} />
-              ))}
-            </div>
-
-            <div className="flex gap-3 justify-center">
+            <DraftResult captains={captains} />
+            <div className="flex justify-center gap-3">
               <button
-                onClick={handleBalance}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+                onClick={handleUndo}
+                disabled={history.length === 0}
+                className="px-6 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 text-white text-sm rounded-lg transition-colors"
               >
-                밸런스 다시 나누기
+                ↩ 마지막 되돌리기
               </button>
               <button
-                onClick={handleRandom}
-                className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+                onClick={handleReset}
+                className="px-6 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors"
               >
-                랜덤 다시 나누기
+                새 경매
               </button>
             </div>
           </div>

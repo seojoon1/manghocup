@@ -7,9 +7,24 @@
 
 html,
 body {
-  @apply bg-white dark:bg-gray-950;
+  @apply bg-gray-950 text-white;
+  color-scheme: dark;
+}
 
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
-  }
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}
+
+/* Select option bg fix */
+select option {
+  background-color: #1f2937;
 }

@@ -72,6 +72,7 @@ const CAPTAIN_BUDGET_BY_TIER: Record<Tier, number> = {
 
 const AUCTION_ROUND_SECONDS = 30;
 const DRAFT_STORAGE_KEY = "manghocup.draft.v1";
+const MAX_CAPTAINS = 8;
 
 type AuctionHistoryItem = {
   captainIdx: number;
@@ -145,7 +146,7 @@ export default function Home() {
       setSelectedCaptainIds(
         new Set(
           Array.isArray(snapshot.selectedCaptainIds)
-            ? snapshot.selectedCaptainIds
+            ? snapshot.selectedCaptainIds.slice(0, MAX_CAPTAINS)
             : []
         )
       );
@@ -207,6 +208,9 @@ export default function Home() {
       if (next.has(player.id)) {
         next.delete(player.id);
       } else {
+        if (next.size >= MAX_CAPTAINS) {
+          return prev;
+        }
         next.add(player.id);
       }
       return next;
@@ -284,6 +288,41 @@ export default function Home() {
   );
 
   const handleSkip = useCallback(() => {
+    const player = auctionPool[auctionIndex];
+
+    if (player) {
+      const availableCaptainIndices = captains
+        .map((captain, idx) => ({ captain, idx }))
+        .filter(({ captain }) => captain.members.length < membersPerTeam)
+        .map(({ idx }) => idx);
+
+      if (availableCaptainIndices.length > 0) {
+        const randomIdx =
+          availableCaptainIndices[
+            Math.floor(Math.random() * availableCaptainIndices.length)
+          ];
+
+        const selectedCaptain = captains[randomIdx];
+        setHistory((prev) => [
+          ...prev,
+          {
+            captainIdx: randomIdx,
+            player,
+            amount: 0,
+            prevBudget: selectedCaptain.budget,
+          },
+        ]);
+
+        setCaptains((prev) =>
+          prev.map((captain, idx) =>
+            idx === randomIdx
+              ? { ...captain, members: [...captain.members, player] }
+              : captain
+          )
+        );
+      }
+    }
+
     const nextIndex = auctionIndex + 1;
 
     if (nextIndex >= auctionPool.length) {
@@ -293,7 +332,7 @@ export default function Home() {
     }
 
     setAuctionIndex(nextIndex);
-  }, [auctionIndex, auctionPool.length]);
+  }, [auctionIndex, auctionPool, captains, membersPerTeam]);
 
   // 되돌리기
   const handleUndo = useCallback(() => {
@@ -456,7 +495,7 @@ export default function Home() {
             selectedCaptainIds={selectedCaptainIds}
             onToggleCaptain={toggleCaptain}
             onConfirm={confirmCaptains}
-            maxCaptains={Math.floor(allPlayers.length / 3)}
+            maxCaptains={MAX_CAPTAINS}
           />
         )}
 

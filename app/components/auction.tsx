@@ -225,6 +225,21 @@ export function Auction({
     setBidAmounts({});
   };
 
+  const handleForceSettle = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(ROUND_STORAGE_KEY);
+    }
+
+    setIsRoundStarted(false);
+
+    if (highestBidder !== null && currentBid > 0) {
+      onBid(highestBidder, currentBid);
+      return;
+    }
+
+    onSkip();
+  };
+
   useEffect(() => {
     if (!isRoundStarted || highestBidder === null) {
       return;
@@ -252,6 +267,33 @@ export function Auction({
     captains,
     membersPerTeam,
     onBid,
+  ]);
+
+  useEffect(() => {
+    if (!isRoundStarted || highestBidder !== null) {
+      return;
+    }
+
+    const hasAnyOpeningBidder = captains.some(
+      (captain) =>
+        captain.members.length < membersPerTeam &&
+        captain.budget >= startPrice
+    );
+
+    if (!hasAnyOpeningBidder) {
+      setIsRoundStarted(false);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(ROUND_STORAGE_KEY);
+      }
+      onSkip();
+    }
+  }, [
+    isRoundStarted,
+    highestBidder,
+    captains,
+    membersPerTeam,
+    startPrice,
+    onSkip,
   ]);
 
   return (
@@ -325,7 +367,11 @@ export function Auction({
           const isHighestBidder = highestBidder === idx;
           const bidValue = bidAmounts[idx] || 0;
           const minBid = highestBidder === null ? startPrice : currentBid + 1;
-          const cannotBid = isFull || isHighestBidder || !isRoundStarted;
+          const cannotBid =
+            isFull ||
+            isHighestBidder ||
+            !isRoundStarted ||
+            captain.budget < minBid;
 
           return (
             <div
@@ -405,6 +451,13 @@ export function Auction({
 
       {/* Controls */}
       <div className="flex gap-3 justify-center">
+        <button
+          onClick={handleForceSettle}
+          disabled={!isRoundStarted}
+          className="px-4 py-2 bg-rose-700 hover:bg-rose-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded-lg transition-colors"
+        >
+          테스트: 바로 낙찰
+        </button>
         {canUndo && (
           <button
             onClick={onUndo}

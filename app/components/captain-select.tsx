@@ -46,14 +46,17 @@ export function CaptainSelect({
       <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
         {players.map((player, i) => {
           const isCaptain = selectedCaptainIds.has(player.id);
+          const cannotSelectMore = !isCaptain && selectedCount >= maxCaptains;
+
           return (
             <button
               key={player.id}
               onClick={() => onToggleCaptain(player)}
+              disabled={cannotSelectMore}
               className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-b border-gray-800 last:border-b-0 ${
                 isCaptain
                   ? "bg-blue-500/15 hover:bg-blue-500/20"
-                  : "hover:bg-gray-800"
+                  : "hover:bg-gray-800 disabled:hover:bg-transparent disabled:opacity-50 disabled:cursor-not-allowed"
               }`}
             >
               {/* 체크 */}

@@ -9,7 +9,8 @@ interface BidMessage {
 
 export function useRemoteBid(
   captains: Captain[],
-  onRemoteBid: (captainIndex: number, amount: number) => void
+  onRemoteBid: (captainIndex: number, amount: number) => void,
+  enabled: boolean = true
 ) {
   useEffect(() => {
     const wsUrl = "ws://localhost:8000/ws";
@@ -73,5 +74,5 @@ export function useRemoteBid(
       ws.removeEventListener("close", handleClose);
       ws.close();
     };
-  }, [captains, onRemoteBid]);
+  }, [captains, onRemoteBid, enabled]);
 }

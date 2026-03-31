@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { Player, Captain } from "~/types/player";
 import { useAuctionRound } from "~/hooks/useAuctionRound";
 import { useRemoteBid } from "~/hooks/useRemoteBid";

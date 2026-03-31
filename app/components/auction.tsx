@@ -214,13 +214,14 @@ export function Auction({
 
       {/* Controls */}
       <div className="flex gap-3 justify-center">
+        {import.meta.env.DEV && (
         <button
           onClick={handleForceSettle}
           disabled={!isRoundStarted}
           className="px-4 py-2 bg-rose-700 hover:bg-rose-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded-lg transition-colors"
         >
           테스트: 바로 낙찰
-        </button>
+        </button>)}
         {canUndo && (
           <button
             onClick={onUndo}

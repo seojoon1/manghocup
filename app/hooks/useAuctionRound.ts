@@ -242,23 +242,29 @@ export function useAuctionRound({
     setBidAmounts((prev) => ({ ...prev, [captainIdx]: num }));
   };
 
-  const handleBid = (captainIdx: number) => {
+  const handleBid = (captainIdx: number, amountOverride?: number) => {
     if (!isRoundStarted) {
+      console.warn(`❌ 경매 시작 안 됨`);
       return;
     }
 
     if (captainIdx === highestBidder) {
+      console.warn(`❌ 이미 최고 입찰 팀`);
       return;
     }
 
-    const amount = bidAmounts[captainIdx] || 0;
+    const amount = amountOverride ?? (bidAmounts[captainIdx] || 0);
     const captain = captains[captainIdx];
     const minBid = highestBidder === null ? startPrice : currentBid + 1;
 
     if (amount < minBid || amount > captain.budget) {
+      console.warn(
+        `❌ 입찰 금액 범위 오류: ${amount}원 (최소: ${minBid}, 예산: ${captain.budget})`
+      );
       return;
     }
 
+    console.log(`✅ 입찰 성공: 팀${captainIdx + 1} ${amount}원`);
     setCurrentBid(amount);
     setHighestBidder(captainIdx);
     setTimeLeft(roundSeconds);

@@ -1,5 +1,7 @@
+import { useCallback } from "react";
 import type { Player, Captain } from "~/types/player";
 import { useAuctionRound } from "~/hooks/useAuctionRound";
+import { useRemoteBid } from "~/hooks/useRemoteBid";
 
 interface AuctionProps {
   currentPlayer: Player;
@@ -58,6 +60,16 @@ export function Auction({
     onBid,
     onSkip,
   });
+
+  // 원격 입찰 수신: amount를 직접 전달해서 입찰
+  const handleRemoteBid = useCallback(
+    (captainIdx: number, amount: number) => {
+      handleBid(captainIdx, amount);
+    },
+    [handleBid]
+  );
+
+  useRemoteBid(captains, handleRemoteBid);
 
   return (
     <div className="space-y-6">

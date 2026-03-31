@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { Player, Captain, Tier } from "~/types/player";
+import type { Player, Captain } from "~/types/player";
+import { useAuctionRound } from "~/hooks/useAuctionRound";
 
 interface AuctionProps {
   currentPlayer: Player;
@@ -27,31 +27,6 @@ const tierColors: Record<string, string> = {
   Immortal: "text-amber-300",
 };
 
-const PLAYER_START_PRICE_BY_TIER: Record<Tier, number> = {
-  Iron: 50,
-  Bronze: 80,
-  Silver: 110,
-  Gold: 140,
-  Platinum: 180,
-  Diamond: 220,
-  Meteorite: 260,
-  Mythril: 310,
-  Titan: 360,
-  Immortal: 420,
-};
-
-const ROUND_STORAGE_KEY = "manghocup.round.v1";
-
-type RoundSnapshot = {
-  version: 1;
-  playerId: string;
-  timeLeft: number;
-  isRoundStarted: boolean;
-  currentBid: number;
-  highestBidder: number | null;
-  bidAmounts: Record<number, number>;
-};
-
 export function Auction({
   currentPlayer,
   captains,
@@ -64,237 +39,25 @@ export function Auction({
   membersPerTeam,
   roundSeconds,
 }: AuctionProps) {
-  const startPrice = PLAYER_START_PRICE_BY_TIER[currentPlayer.tier];
-  const [timeLeft, setTimeLeft] = useState(roundSeconds);
-  const [isRoundStarted, setIsRoundStarted] = useState(false);
-  const [currentBid, setCurrentBid] = useState(startPrice - 1);
-  const [highestBidder, setHighestBidder] = useState<number | null>(null);
-  const [bidAmounts, setBidAmounts] = useState<Record<number, number>>({});
-  const [roundPlayerId, setRoundPlayerId] = useState(currentPlayer.id);
-
-  useEffect(() => {
-    setRoundPlayerId(currentPlayer.id);
-
-    if (typeof window === "undefined") {
-      setTimeLeft(roundSeconds);
-      setIsRoundStarted(false);
-      setCurrentBid(startPrice - 1);
-      setHighestBidder(null);
-      setBidAmounts({});
-      return;
-    }
-
-    try {
-      const raw = window.localStorage.getItem(ROUND_STORAGE_KEY);
-      if (!raw) {
-        setTimeLeft(roundSeconds);
-        setIsRoundStarted(false);
-        setCurrentBid(startPrice - 1);
-        setHighestBidder(null);
-        setBidAmounts({});
-        return;
-      }
-
-      const snapshot = JSON.parse(raw) as Partial<RoundSnapshot>;
-      const isValidPlayer = snapshot.playerId === currentPlayer.id;
-      const restoredTimeLeft = snapshot.timeLeft;
-      const isValidTime =
-        typeof restoredTimeLeft === "number" &&
-        restoredTimeLeft >= 0 &&
-        restoredTimeLeft <= roundSeconds;
-
-      if (snapshot.version !== 1 || !isValidPlayer || !isValidTime) {
-        setTimeLeft(roundSeconds);
-        setIsRoundStarted(false);
-        setCurrentBid(startPrice - 1);
-        setHighestBidder(null);
-        setBidAmounts({});
-        return;
-      }
-
-      setTimeLeft(restoredTimeLeft);
-      setIsRoundStarted(Boolean(snapshot.isRoundStarted));
-      setCurrentBid(
-        typeof snapshot.currentBid === "number"
-          ? snapshot.currentBid
-          : startPrice - 1
-      );
-      setHighestBidder(
-        typeof snapshot.highestBidder === "number" ? snapshot.highestBidder : null
-      );
-      setBidAmounts(snapshot.bidAmounts ?? {});
-    } catch {
-      setTimeLeft(roundSeconds);
-      setIsRoundStarted(false);
-      setCurrentBid(startPrice - 1);
-      setHighestBidder(null);
-      setBidAmounts({});
-    }
-  }, [currentPlayer.id, roundSeconds, startPrice]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const snapshot: RoundSnapshot = {
-      version: 1,
-      playerId: currentPlayer.id,
-      timeLeft,
-      isRoundStarted,
-      currentBid,
-      highestBidder,
-      bidAmounts,
-    };
-
-    window.localStorage.setItem(ROUND_STORAGE_KEY, JSON.stringify(snapshot));
-  }, [
-    currentPlayer.id,
+  const {
+    startPrice,
     timeLeft,
     isRoundStarted,
     currentBid,
     highestBidder,
     bidAmounts,
-  ]);
-
-  useEffect(() => {
-    if (roundPlayerId !== currentPlayer.id) {
-      return;
-    }
-
-    if (!isRoundStarted) {
-      return;
-    }
-
-    if (timeLeft <= 0) {
-      setIsRoundStarted(false);
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(ROUND_STORAGE_KEY);
-      }
-      if (highestBidder !== null && currentBid > 0) {
-        onBid(highestBidder, currentBid);
-      } else {
-        onSkip();
-      }
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setTimeLeft((prev) => prev - 1);
-    }, 1000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [
-    roundPlayerId,
-    currentPlayer.id,
-    isRoundStarted,
-    timeLeft,
-    highestBidder,
-    currentBid,
-    onBid,
-    onSkip,
-  ]);
-
-  const handleBidChange = (captainIdx: number, value: string) => {
-    const num = parseInt(value) || 0;
-    setBidAmounts((prev) => ({ ...prev, [captainIdx]: num }));
-  };
-
-  const handleBid = (captainIdx: number) => {
-    if (!isRoundStarted) {
-      return;
-    }
-
-    if (captainIdx === highestBidder) {
-      return;
-    }
-
-    const amount = bidAmounts[captainIdx] || 0;
-    const captain = captains[captainIdx];
-    const minBid = highestBidder === null ? startPrice : currentBid + 1;
-
-    if (amount < minBid || amount > captain.budget) {
-      return;
-    }
-
-    setCurrentBid(amount);
-    setHighestBidder(captainIdx);
-    setTimeLeft(roundSeconds);
-    setBidAmounts({});
-  };
-
-  const handleForceSettle = () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(ROUND_STORAGE_KEY);
-    }
-
-    setIsRoundStarted(false);
-
-    if (highestBidder !== null && currentBid > 0) {
-      onBid(highestBidder, currentBid);
-      return;
-    }
-
-    onSkip();
-  };
-
-  useEffect(() => {
-    if (!isRoundStarted || highestBidder === null) {
-      return;
-    }
-
-    const nextMinBid = currentBid + 1;
-    const hasAnyChallenger = captains.some(
-      (captain, idx) =>
-        idx !== highestBidder &&
-        captain.members.length < membersPerTeam &&
-        captain.budget >= nextMinBid
-    );
-
-    if (!hasAnyChallenger) {
-      setIsRoundStarted(false);
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(ROUND_STORAGE_KEY);
-      }
-      onBid(highestBidder, currentBid);
-    }
-  }, [
-    isRoundStarted,
-    highestBidder,
-    currentBid,
+    startRound,
+    handleBid,
+    handleBidChange,
+    handleForceSettle,
+  } = useAuctionRound({
+    currentPlayer,
     captains,
     membersPerTeam,
+    roundSeconds,
     onBid,
-  ]);
-
-  useEffect(() => {
-    if (!isRoundStarted || highestBidder !== null) {
-      return;
-    }
-
-    const hasAnyOpeningBidder = captains.some(
-      (captain) =>
-        captain.members.length < membersPerTeam &&
-        captain.budget >= startPrice
-    );
-
-    if (!hasAnyOpeningBidder) {
-      setIsRoundStarted(false);
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(ROUND_STORAGE_KEY);
-      }
-      onSkip();
-    }
-  }, [
-    isRoundStarted,
-    highestBidder,
-    captains,
-    membersPerTeam,
-    startPrice,
     onSkip,
-  ]);
+  });
 
   return (
     <div className="space-y-6">
@@ -319,7 +82,7 @@ export function Auction({
         </div>
         <div className="mt-2">
           <button
-            onClick={() => setIsRoundStarted(true)}
+            onClick={startRound}
             disabled={isRoundStarted}
             className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-400 text-white text-xs font-semibold rounded transition-colors"
           >

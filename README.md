@@ -1,87 +1,40 @@
-# Welcome to React Router!
+# 망호컵 (manghocup)
 
-A modern, production-ready template for building full-stack React applications using React Router.
+이터널리턴 내전을 **실시간 경매 방식으로 팀을 구성**하는 웹 애플리케이션.
+선수를 불러와 팀장을 뽑고, 라운드 타이머 경매로 팀원을 낙찰받아 최종 팀을 만든다.
+디스코드와 연동되어 입찰·채팅이 경매 화면에 실시간으로 반영된다.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+## 진행 흐름
 
-## Features
+1. **선수 불러오기** — 등록된 선수 목록을 불러온다. 각 선수의 닉네임·MMR·티어·자기어필이 함께 들어온다.
+2. **팀장 선정** — 불러온 선수 중 팀장을 선택한다(최대 8명). 팀장의 티어에 따라 팀 예산이 정해진다.
+3. **경매** — 팀장을 제외한 선수가 한 명씩 매물로 올라온다. 라운드 타이머 안에서 팀장들이 예산 내로 입찰하고, 가장 높은 금액이 낙찰된다.
+4. **결과** — 완성된 팀 구성과 남은 예산을 확인한다.
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+진행 중인 경매는 자동 저장되어, 새로고침하거나 창을 닫았다 열어도 이어서 진행할 수 있다.
 
-## Getting Started
+## 핵심 기능
 
-### Installation
+- **실시간 경매** — 라운드별 카운트다운 타이머. 시간이 끝나면 최고 입찰자에게 자동 낙찰.
+- **자기어필** — 경매 매물 카드에 선수가 작성한 자기어필 문구가 표시되어 입찰 판단을 돕는다.
+- **원격 입찰** — 디스코드에서 들어온 입찰이 웹 경매 화면에 즉시 반영된다.
+- **실시간 채팅** — 디스코드 채팅이 경매 화면 옆 사이드 패널에 실시간으로 흐른다.
+- **스킵 / 되돌리기** — 유찰 처리(빈 자리 자동 배정)와 직전 낙찰 취소를 지원한다.
+- **자동 저장** — 진행 상태가 브라우저에 저장되어 끊김 없이 이어진다.
+- **반응형 다크 UI** — 회색·검정 기반 모노톤 다크 테마.
 
-Install the dependencies:
-
-```bash
-npm install
-```
-
-### Development
-
-Start the development server with HMR:
+## 시작하기
 
 ```bash
-npm run dev
+npm install   # 의존성 설치
+npm run dev   # 개발 서버 (http://localhost:5173)
 ```
 
-Your application will be available at `http://localhost:5173`.
-
-## Building for Production
-
-Create a production build:
+프로덕션 빌드:
 
 ```bash
 npm run build
+npm run start
 ```
 
-## Deployment
-
-### Docker Deployment
-
-To build and run using Docker:
-
-```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
-```
-
-The containerized application can be deployed to any platform that supports Docker, including:
-
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+> 선수 불러오기·입찰·채팅이 동작하려면 백엔드 서버가 함께 실행 중이어야 한다.

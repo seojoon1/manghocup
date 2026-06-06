@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 import type { Player, Captain } from "~/types/player";
 import { useAuctionRound } from "~/hooks/useAuctionRound";
 import { useRemoteBid } from "~/hooks/useRemoteBid";
+import { useRemoteChat } from "~/hooks/useRemoteChat";
+import { ChatPanel } from "~/components/chat-panel";
 
 interface AuctionProps {
   currentPlayer: Player;
@@ -71,8 +73,12 @@ export function Auction({
 
   useRemoteBid(captains, handleRemoteBid);
 
+  // 원격 채팅 수신 (디스코드 봇 → /api/chat → 브로드캐스트)
+  const chatMessages = useRemoteChat();
+
   return (
-    <div className="space-y-6">
+    <div className="flex gap-6 items-start">
+      <div className="flex-1 min-w-0 space-y-6">
       {/* Progress */}
       <div className="text-center text-gray-500 text-sm">
         경매 {playerIndex + 1} / {totalPlayers}
@@ -249,6 +255,9 @@ export function Auction({
           </button>
         )}
       </div>
+      </div>
+
+      <ChatPanel messages={chatMessages} />
     </div>
   );
 }

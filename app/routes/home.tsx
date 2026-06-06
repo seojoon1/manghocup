@@ -2,14 +2,10 @@ import { useState, useCallback, useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/home";
 import type { Player, Captain, Phase, Tier } from "~/types/player";
+import { TIERS } from "~/types/player";
 import { CaptainSelect } from "~/components/captain-select";
 import { Auction } from "~/components/auction";
 import { DraftResult } from "~/components/draft-result";
-import {
-  toGoogleSheetsJsonUrl,
-  parseGoogleSheetsJson,
-  extractSheetId,
-} from "~/utils/csv-parser";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -18,31 +14,46 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-// 서버 사이드에서 Google Sheets JSON fetch
+const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:8000";
+
+// 서버 사이드에서 백엔드 API로 선수 데이터 fetch
 export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const rawUrl = formData.get("csvUrl") as string;
-
-  if (!rawUrl?.trim()) {
-    return { error: "CSV 링크를 입력해주세요.", players: null };
-  }
-
   try {
-    const sheetId = extractSheetId(rawUrl.trim());
-    if (!sheetId) {
-      return { error: "올바른 Google Sheets 링크가 아닙니다.", players: null };
-    }
-
-    const url = toGoogleSheetsJsonUrl(rawUrl.trim());
-    const res = await fetch(url);
+    const res = await fetch(`${API_BASE_URL}/api/players`);
     if (!res.ok) {
       return {
-        error: `데이터를 가져올 수 없습니다. (${res.status}) — 시트가 공개 상태인지 확인하세요.`,
+        error: `서버에서 데이터를 가져올 수 없습니다. (${res.status})`,
         players: null,
       };
     }
-    const text = await res.text();
-    const players = parseGoogleSheetsJson(text);
+
+    const data = await res.json();
+    const rawPlayers = data.players as Array<{
+      discord_username: string;
+      username: string;
+      mmr: number;
+      tier: string;
+      appeal: string;
+    }>;
+
+    if (!rawPlayers || rawPlayers.length === 0) {
+      return { error: "등록된 선수가 없습니다.", players: null };
+    }
+
+    const players: Player[] = rawPlayers.map((p) => {
+      const tier = TIERS.find((t) => t.toLowerCase() === p.tier.toLowerCase());
+      if (!tier) {
+        throw new Error(`"${p.username}" — "${p.tier}"는 인식할 수 없는 티어입니다.`);
+      }
+      return {
+        id: crypto.randomUUID(),
+        discord_username: p.discord_username,
+        name: p.username,
+        mmr: p.mmr,
+        tier,
+        appeal: p.appeal ?? "",
+      };
+    });
 
     if (players.length < 6) {
       return { error: "최소 6명이 필요합니다.", players: null };
@@ -65,9 +76,9 @@ const CAPTAIN_BUDGET_BY_TIER: Record<Tier, number> = {
   Platinum: 1100,
   Diamond: 1050,
   Meteorite: 1000,
-  Mythril: 950,
-  Titan: 900,
-  Immortal: 850,
+  Mithril: 950,
+  Demigod: 900,
+  Eternity: 850,
 };
 
 const AUCTION_ROUND_SECONDS = 30;
@@ -83,7 +94,6 @@ type AuctionHistoryItem = {
 
 type DraftSnapshot = {
   version: 1;
-  csvUrl: string;
   allPlayers: Player[];
   phase: Phase;
   selectedCaptainIds: string[];
@@ -95,7 +105,6 @@ type DraftSnapshot = {
 
 export default function Home() {
   const fetcher = useFetcher<typeof action>();
-  const [csvUrl, setCsvUrl] = useState("");
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [phase, setPhase] = useState<Phase>("input");
 
@@ -140,7 +149,6 @@ export default function Home() {
           ? snapshot.phase
           : "input";
 
-      setCsvUrl(typeof snapshot.csvUrl === "string" ? snapshot.csvUrl : "");
       setAllPlayers(Array.isArray(snapshot.allPlayers) ? snapshot.allPlayers : []);
       setPhase(validPhase);
       setSelectedCaptainIds(
@@ -170,7 +178,6 @@ export default function Home() {
 
     const snapshot: DraftSnapshot = {
       version: 1,
-      csvUrl,
       allPlayers,
       phase,
       selectedCaptainIds: Array.from(selectedCaptainIds),
@@ -183,7 +190,6 @@ export default function Home() {
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(snapshot));
   }, [
     hasHydrated,
-    csvUrl,
     allPlayers,
     phase,
     selectedCaptainIds,
@@ -361,7 +367,6 @@ export default function Home() {
 
   // 리셋
   const handleReset = useCallback(() => {
-    setCsvUrl("");
     setAllPlayers([]);
     setSelectedCaptainIds(new Set());
     setCaptains([]);
@@ -377,14 +382,13 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen flex flex-col bg-gray-950 text-white">
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              <span className="text-blue-400">망호</span>
-              <span className="text-red-400">컵</span>
+              <span className="text-white">seojoon1</span>
             </h1>
             <p className="text-gray-500 text-sm">이터널리턴 내전 경매</p>
           </div>
@@ -399,85 +403,26 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* Phase 1: CSV 입력 */}
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-8">
+        {/* Phase 1: 선수 불러오기 */}
         {phase === "input" && (
           <div className="space-y-6 max-w-2xl mx-auto">
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
+            <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 text-center">
               <h2 className="text-lg font-semibold text-gray-200 mb-4">
-                스프레드시트 링크 입력
+                선수 목록 불러오기
               </h2>
-              <p className="text-gray-400 text-sm mb-4">
-                Google Sheets 공유 링크를 입력하세요. (링크가 있는 사람 모두
-                보기로 설정)
+              <p className="text-gray-400 text-sm mb-6">
+                서버에 등록된 선수 데이터를 불러옵니다.
               </p>
-              <fetcher.Form method="post" className="flex gap-3">
-                <input
-                  type="url"
-                  name="csvUrl"
-                  value={csvUrl}
-                  onChange={(e) => setCsvUrl(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+              <fetcher.Form method="post">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-400 text-white font-semibold rounded-lg transition-colors text-sm whitespace-nowrap"
+                  className="px-8 py-3 bg-gray-100 hover:bg-white disabled:bg-gray-700 disabled:text-gray-400 text-gray-900 font-semibold rounded-lg transition-colors text-sm"
                 >
-                  {loading ? "불러오는 중..." : "불러오기"}
+                  {loading ? "불러오는 중..." : "선수 불러오기"}
                 </button>
               </fetcher.Form>
-            </div>
-
-            {/* 형식 안내 */}
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">
-                스프레드시트 형식
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-gray-800 text-gray-300">
-                      <th className="border border-gray-700 px-3 py-2 text-left">
-                        이름
-                      </th>
-                      <th className="border border-gray-700 px-3 py-2 text-left">
-                        티어
-                      </th>
-                      <th className="border border-gray-700 px-3 py-2 text-left">
-                        메모 (선택)
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-gray-400">
-                    <tr>
-                      <td className="border border-gray-700 px-3 py-2">
-                        홍길동
-                      </td>
-                      <td className="border border-gray-700 px-3 py-2">
-                        미스릴
-                      </td>
-                      <td className="border border-gray-700 px-3 py-2">
-                        아야 원챔
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="border border-gray-700 px-3 py-2">
-                        김철수
-                      </td>
-                      <td className="border border-gray-700 px-3 py-2">
-                        Diamond
-                      </td>
-                      <td className="border border-gray-700 px-3 py-2"></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="text-gray-500 text-xs mt-3 space-y-1">
-                <p>* 티어: 한글/영문 모두 인식</p>
-                <p>* 각 팀장의 초기 예산은 팀장 티어에 따라 차등 지급됩니다</p>
-              </div>
             </div>
 
             {fetcherError && (
@@ -537,6 +482,14 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-800 bg-gray-900/40">
+        <div className="max-w-6xl mx-auto px-4 py-6 text-center text-sm text-gray-600">
+          made by{" "}
+          <span className="font-semibold text-white">seojoon1</span>
+        </div>
+      </footer>
     </div>
   );
 }

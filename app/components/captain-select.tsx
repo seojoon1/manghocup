@@ -16,9 +16,9 @@ const tierColors: Record<string, string> = {
   Platinum: "text-teal-300",
   Diamond: "text-blue-300",
   Meteorite: "text-orange-400",
-  Mythril: "text-purple-400",
-  Titan: "text-red-400",
-  Immortal: "text-amber-300",
+  Mithril: "text-purple-400",
+  Demigod: "text-red-400",
+  Eternity: "text-amber-300",
 };
 
 export function CaptainSelect({
@@ -38,7 +38,7 @@ export function CaptainSelect({
           팀장으로 지정할 플레이어를 선택하세요
         </p>
         <div className="text-sm">
-          <span className="text-blue-400 font-bold">{selectedCount}</span>
+          <span className="text-gray-100 font-bold">{selectedCount}</span>
           <span className="text-gray-500"> / {maxCaptains}명 선택</span>
         </div>
       </div>
@@ -55,7 +55,7 @@ export function CaptainSelect({
               disabled={cannotSelectMore}
               className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-b border-gray-800 last:border-b-0 ${
                 isCaptain
-                  ? "bg-blue-500/15 hover:bg-blue-500/20"
+                  ? "bg-white/10 hover:bg-white/15"
                   : "hover:bg-gray-800 disabled:hover:bg-transparent disabled:opacity-50 disabled:cursor-not-allowed"
               }`}
             >
@@ -63,13 +63,13 @@ export function CaptainSelect({
               <div
                 className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
                   isCaptain
-                    ? "border-blue-500 bg-blue-500"
+                    ? "border-gray-200 bg-gray-200"
                     : "border-gray-600"
                 }`}
               >
                 {isCaptain && (
                   <svg
-                    className="w-3 h-3 text-white"
+                    className="w-3 h-3 text-gray-900"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -91,7 +91,7 @@ export function CaptainSelect({
 
               {/* 이름 */}
               <span
-                className={`font-medium flex-1 ${isCaptain ? "text-blue-300" : "text-white"}`}
+                className={`font-medium flex-1 ${isCaptain ? "text-gray-100" : "text-white"}`}
               >
                 {player.name}
               </span>
@@ -103,16 +103,14 @@ export function CaptainSelect({
                 {player.tier}
               </span>
 
-              {/* 메모 */}
-              {player.memo && (
-                <span className="text-gray-500 text-xs truncate max-w-[120px]">
-                  {player.memo}
-                </span>
-              )}
+              {/* MMR */}
+              <span className="text-gray-500 text-xs">
+                MMR {player.mmr}
+              </span>
 
               {/* 팀장 뱃지 */}
               {isCaptain && (
-                <span className="text-[10px] bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full font-semibold">
+                <span className="text-[10px] bg-white/15 text-gray-200 px-2 py-0.5 rounded-full font-semibold">
                   팀장
                 </span>
               )}
@@ -124,7 +122,7 @@ export function CaptainSelect({
       <button
         onClick={onConfirm}
         disabled={selectedCount < 2}
-        className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold rounded-lg transition-colors text-sm"
+        className="w-full py-3 bg-gray-100 hover:bg-white disabled:bg-gray-700 disabled:text-gray-500 text-gray-900 font-semibold rounded-lg transition-colors text-sm"
       >
         {selectedCount < 2
           ? `팀장을 ${2}명 이상 선택해주세요`

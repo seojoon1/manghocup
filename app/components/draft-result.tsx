@@ -12,9 +12,9 @@ const tierColors: Record<string, string> = {
   Platinum: "text-teal-300",
   Diamond: "text-blue-300",
   Meteorite: "text-orange-400",
-  Mythril: "text-purple-400",
-  Titan: "text-red-400",
-  Immortal: "text-amber-300",
+  Mithril: "text-purple-400",
+  Demigod: "text-red-400",
+  Eternity: "text-amber-300",
 };
 
 export function DraftResult({ captains }: DraftResultProps) {

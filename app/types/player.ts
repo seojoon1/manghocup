@@ -6,18 +6,20 @@ export const TIERS = [
   "Platinum",
   "Diamond",
   "Meteorite",
-  "Mythril",
-  "Titan",
-  "Immortal",
+  "Mithril",
+  "Demigod",
+  "Eternity",
 ] as const;
 
 export type Tier = (typeof TIERS)[number];
 
 export interface Player {
   id: string;
+  discord_username: string;
   name: string;
+  mmr: number;
   tier: Tier;
-  memo: string;
+  appeal: string;
 }
 
 export interface Captain {

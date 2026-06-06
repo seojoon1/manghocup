@@ -9,9 +9,9 @@ const PLAYER_START_PRICE_BY_TIER: Record<Tier, number> = {
   Platinum: 180,
   Diamond: 220,
   Meteorite: 260,
-  Mythril: 310,
-  Titan: 360,
-  Immortal: 420,
+  Mithril: 310,
+  Demigod: 360,
+  Eternity: 420,
 };
 
 const ROUND_STORAGE_KEY = "manghocup.round.v1";

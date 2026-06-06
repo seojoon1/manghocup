@@ -24,9 +24,9 @@ const tierColors: Record<string, string> = {
   Platinum: "text-teal-300",
   Diamond: "text-blue-300",
   Meteorite: "text-orange-400",
-  Mythril: "text-purple-400",
-  Titan: "text-red-400",
-  Immortal: "text-amber-300",
+  Mithril: "text-purple-400",
+  Demigod: "text-red-400",
+  Eternity: "text-amber-300",
 };
 
 export function Auction({
@@ -87,7 +87,7 @@ export function Auction({
               ? "text-gray-400"
               : timeLeft <= 5
                 ? "text-red-400"
-                : "text-blue-400"
+                : "text-gray-100"
           }`}
         >
           00:{String(timeLeft).padStart(2, "0")}
@@ -96,7 +96,7 @@ export function Auction({
           <button
             onClick={startRound}
             disabled={isRoundStarted}
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-400 text-white text-xs font-semibold rounded transition-colors"
+            className="px-4 py-1.5 bg-gray-100 hover:bg-white disabled:bg-gray-700 disabled:text-gray-400 text-gray-900 text-xs font-semibold rounded transition-colors"
           >
             {isRoundStarted ? "경매 진행 중" : "경매 시작"}
           </button>
@@ -120,15 +120,21 @@ export function Auction({
           {currentPlayer.tier}
         </div>
         <div className="text-sm text-gray-300">시작가 {startPrice}원</div>
-        {currentPlayer.memo && (
-          <div className="text-gray-400 text-sm">"{currentPlayer.memo}"</div>
+        <div className="text-gray-400 text-sm">MMR {currentPlayer.mmr}</div>
+        {currentPlayer.appeal && (
+          <div className="mt-3 rounded-lg border border-gray-700 bg-gray-800/60 px-4 py-3 text-left">
+            <div className="text-xs text-gray-500 mb-1">자기어필</div>
+            <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">
+              {currentPlayer.appeal}
+            </p>
+          </div>
         )}
       </div>
 
       {/* Progress bar */}
       <div className="max-w-md mx-auto bg-gray-800 rounded-full h-1.5">
         <div
-          className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+          className="bg-gray-200 h-1.5 rounded-full transition-all duration-300"
           style={{
             width: `${((playerIndex + 1) / totalPlayers) * 100}%`,
           }}
@@ -155,7 +161,7 @@ export function Auction({
                 isFull
                   ? "border-gray-800 bg-gray-900/50 opacity-50"
                   : isHighestBidder
-                    ? "border-blue-500 bg-blue-500/10"
+                    ? "border-gray-300 bg-white/5"
                     : "border-gray-700 bg-gray-900 hover:border-gray-600"
               }`}
             >
@@ -197,7 +203,7 @@ export function Auction({
                       onChange={(e) => handleBidChange(idx, e.target.value)}
                       placeholder={`최소 ${minBid}`}
                       disabled={cannotBid}
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40"
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm outline-none focus:ring-1 focus:ring-gray-400 disabled:opacity-40"
                     />
                   </div>
                   <button
@@ -208,7 +214,7 @@ export function Auction({
                       bidValue < minBid ||
                       bidValue > captain.budget
                     }
-                    className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-xs font-semibold rounded transition-colors"
+                    className="w-full py-1.5 bg-gray-100 hover:bg-white disabled:bg-gray-700 disabled:text-gray-500 text-gray-900 text-xs font-semibold rounded transition-colors"
                   >
                     {isHighestBidder ? "최고 입찰 중" : "입찰"}
                   </button>

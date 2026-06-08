@@ -14,12 +14,12 @@ export function useRemoteBid(
 ) {
   useEffect(() => {
     const wsUrl = "ws://localhost:8000/ws";
-    // console.log(`🔌 WebSocket 연결 시도: ${wsUrl}`);
+    console.log(`🔌 WebSocket 연결 시도: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
 
     const handleOpen = () => {
-      // console.log("✅ WebSocket 연결 성공!");
+      console.log("✅ WebSocket 연결 성공!");
     };
 
     const handleMessage = (event: MessageEvent) => {
@@ -31,14 +31,16 @@ export function useRemoteBid(
           return;
         }
 
-        // "팀1" → 0, "팀2" → 1 변환
-        const teamMatch = data.team.match(/팀(\d+)/);
+        // team 형식 무관하게 숫자만 추출: "팀1" / "1팀" / "1 팀" / "1" / 1 모두 허용
+        const teamStr = String(data.team ?? "");
+        const teamMatch = teamStr.match(/\d+/);
         if (!teamMatch) {
           console.warn(`❌ 팀 형식 오류: ${data.team}`);
           return;
         }
 
-        const captainIndex = parseInt(teamMatch[1]) - 1;
+        // 1-based 팀번호 → 0-based 인덱스
+        const captainIndex = parseInt(teamMatch[0], 10) - 1;
 
         if (captainIndex < 0 || captainIndex >= captains.length) {
           console.warn(
